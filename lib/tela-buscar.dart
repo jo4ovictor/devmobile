@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 // Por exemplo:
 // import 'package:seu_projeto/tela_buscar_gastos.dart';
 // import 'package:seu_projeto/tela_atas_registro.dart';
-// import 'package:seu_projeto/tela_licitacoes.dart';
+import 'package:devmobile/tela-licitacoes.dart';
 // import 'package:seu_projeto/tela_fornecedores.dart';
 
 
@@ -89,8 +89,8 @@ class TelaBuscar extends StatelessWidget {
                       onTap: () {
                         // Navegar para a tela de Licitações
                         // Exemplo:
-                        // Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaLicitacoes()));
-                         _showPlaceholderScreen(context, 'Licitações');
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaLicitacoes()));
+                        
                       },
                     ),
                     const SizedBox(height: 20),
