@@ -73,7 +73,7 @@ class _TelaLicitacoesState extends State<TelaLicitacoes> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Fundo azul
+      backgroundColor: Colors.white, 
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -85,11 +85,11 @@ class _TelaLicitacoesState extends State<TelaLicitacoes> {
         ),
         title: const Text(
           'Buscar', // Conforme a imagem
-          style: TextStyle(color: Colors.black87),
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.black87), // Ícone de lupa
+            icon: const Icon(Icons.search, color: azulPrincipal), // Ícone de lupa
             onPressed: () {
               // Ação do ícone de busca
               print('Ícone de busca clicado!');

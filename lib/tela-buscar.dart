@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 // Importe as telas para as quais cada card vai navegar (criaremos em seguida)
 // Por enquanto, podemos usar uma tela de placeholder ou TelaSobre para testar.
 // Por exemplo:
-// import 'package:seu_projeto/tela_buscar_gastos.dart';
-// import 'package:seu_projeto/tela_atas_registro.dart';
+import 'package:devmobile/tela-gastosGerais.dart';
+import 'package:devmobile/tela-ataPreco.dart';
 import 'package:devmobile/tela-licitacoes.dart';
-// import 'package:seu_projeto/tela_fornecedores.dart';
+import 'package:devmobile/tela-fornecedores.dart';
 
 
 class TelaBuscar extends StatelessWidget {
@@ -65,8 +65,7 @@ class TelaBuscar extends StatelessWidget {
                       onTap: () {
                         // Navegar para a tela de Buscar Gastos Gerais
                         // Exemplo:
-                        // Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaBuscarGastos()));
-                         _showPlaceholderScreen(context, 'Buscar Gastos Gerais');
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaGastosGerais()));
                       },
                     ),
                     const SizedBox(height: 20),
@@ -77,8 +76,7 @@ class TelaBuscar extends StatelessWidget {
                       onTap: () {
                         // Navegar para a tela de Ata de Registro de Preços
                         // Exemplo:
-                        // Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaAtasRegistro()));
-                         _showPlaceholderScreen(context, 'Ata de Registro de Preços');
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaAtaRegistroPrecos()));
                       },
                     ),
                     const SizedBox(height: 20),
@@ -101,9 +99,7 @@ class TelaBuscar extends StatelessWidget {
                       
                       onTap: () {
                         // Navegar para a tela de Fornecedores
-                        // Exemplo:
-                        // Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaFornecedores()));
-                         _showPlaceholderScreen(context, 'Fornecedores');
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaFornecedores()));
                       },
                     ),
                     // Você pode adicionar mais SizedBox no final se precisar de espaço
