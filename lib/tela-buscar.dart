@@ -1,10 +1,6 @@
-// lib/tela-buscar.dart
 import 'package:flutter/material.dart';
 
-// Importe as telas para as quais cada card vai navegar (criaremos em seguida)
-// Por enquanto, podemos usar uma tela de placeholder ou TelaSobre para testar.
-// Por exemplo:
-import 'package:devmobile/tela-gastosGerais.dart';
+import 'package:devmobile/tela-comprasSemLicitacao.dart';
 import 'package:devmobile/tela-ataPreco.dart';
 import 'package:devmobile/tela-licitacoes.dart';
 import 'package:devmobile/tela-fornecedores.dart';
@@ -56,16 +52,14 @@ class TelaBuscar extends StatelessWidget {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 30.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch, // Estica os cards horizontalmente
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildOptionCard(
                       context,
-                      title: 'Buscar Gastos Gerais',
-                      subtitle: 'Explorar gastos do governo',      
+                      title: 'Buscar Compras Sem Licitação',
+                      subtitle: 'Explorar gastos em compras sem licitação',      
                       onTap: () {
-                        // Navegar para a tela de Buscar Gastos Gerais
-                        // Exemplo:
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaGastosGerais()));
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaComprasSemLicitacao()));
                       },
                     ),
                     const SizedBox(height: 20),
@@ -74,8 +68,6 @@ class TelaBuscar extends StatelessWidget {
                       title: 'Ata de Registro de Preços',
                       subtitle: 'Explorar atas de registro de preços',
                       onTap: () {
-                        // Navegar para a tela de Ata de Registro de Preços
-                        // Exemplo:
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaAtaRegistroPrecos()));
                       },
                     ),
@@ -85,8 +77,6 @@ class TelaBuscar extends StatelessWidget {
                       title: 'Licitações',
                       subtitle: 'Explorar licitações',
                       onTap: () {
-                        // Navegar para a tela de Licitações
-                        // Exemplo:
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaLicitacoes()));
                         
                       },
@@ -98,11 +88,9 @@ class TelaBuscar extends StatelessWidget {
                       subtitle: 'Explorar fornecedores',
                       
                       onTap: () {
-                        // Navegar para a tela de Fornecedores
                           Navigator.push(context, MaterialPageRoute(builder: (context) => const TelaFornecedores()));
                       },
                     ),
-                    // Você pode adicionar mais SizedBox no final se precisar de espaço
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -114,7 +102,6 @@ class TelaBuscar extends StatelessWidget {
     );
   }
 
-  // Widget auxiliar para construir cada card de opção
   Widget _buildOptionCard(BuildContext context, {required String title, required String subtitle, required VoidCallback onTap}) {
     return Card(
       elevation: 0, // Remove a sombra padrão do Card

@@ -1,11 +1,13 @@
-// lib/services/api_service.dart
-
 import 'package:http/http.dart' as http;
-import '../models/arp_model.dart'; // Importa nosso modelo de dados
+import '../models/arp_model.dart';
 import '../models/licitacao_model.dart';
+import '../models/fornecedor_model.dart';
+import '../models/compra_sem_licitacao_model.dart';
 
 export '../models/arp_model.dart';
 export '../models/licitacao_model.dart';
+export '../models/fornecedor_model.dart';
+export '../models/compra_sem_licitacao_model.dart';
 
 class ApiService {
   // URL base da API
@@ -95,6 +97,66 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Erro de conexão com API de Licitações: $e');
+    }
+  }
+
+  Future<FornecedorResponse> buscarFornecedores({
+    int pagina = 1,
+    int tamanhoPagina = 10,
+    required bool ativo, // Obrigatório pela API
+    String? cnpj,
+    String? cpf,
+    String? codigoCnae,
+  }) async {
+    const endpoint = '/modulo-fornecedor/1_consultarFornecedor';
+    final queryParameters = {
+      'pagina': pagina.toString(),
+      'tamanhoPagina': tamanhoPagina.toString(),
+      'ativo': ativo.toString(), // 'true' ou 'false'
+      if (cnpj != null && cnpj.isNotEmpty) 'cnpj': cnpj,
+      if (cpf != null && cpf.isNotEmpty) 'cpf': cpf,
+      if (codigoCnae != null && codigoCnae.isNotEmpty) 'codigoCnae': codigoCnae,
+    };
+
+    final uri = Uri.https(_baseUrl, endpoint, queryParameters);
+
+    try {
+      final response = await http.get(uri, headers: {'Accept': 'application/json'});
+      if (response.statusCode == 200) {
+        return fornecedorResponseFromJson(response.body);
+      } else {
+        throw Exception('Falha ao carregar dados da API de Fornecedores. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Erro de conexão com API de Fornecedores: $e');
+    }
+  }
+
+  Future<CompraSemLicitacaoResponse> buscarComprasSemLicitacao({
+    int pagina = 1,
+    int tamanhoPagina = 10,
+    required int dtAnoAviso, // Obrigatório
+    String? coUasg,
+  }) async {
+    const endpoint = '/modulo-legado/5_consultarComprasSemLicitacao';
+    final queryParameters = {
+      'pagina': pagina.toString(),
+      'tamanhoPagina': tamanhoPagina.toString(),
+      'dt_ano_aviso': dtAnoAviso.toString(),
+      if (coUasg != null && coUasg.isNotEmpty) 'co_uasg': coUasg,
+    };
+
+    final uri = Uri.https(_baseUrl, endpoint, queryParameters);
+
+    try {
+      final response = await http.get(uri, headers: {'Accept': 'application/json'});
+      if (response.statusCode == 200) {
+        return compraSemLicitacaoResponseFromJson(response.body);
+      } else {
+        throw Exception('Falha ao carregar dados da API. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Erro de conexão com a API: $e');
     }
   }
 }

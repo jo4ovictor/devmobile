@@ -1,5 +1,3 @@
-// lib/models/licitacao_model.dart
-
 import 'dart:convert';
 
 LicitacaoResponse licitacaoResponseFromJson(String str) => LicitacaoResponse.fromJson(json.decode(str));
