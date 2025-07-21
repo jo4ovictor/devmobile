@@ -1,5 +1,9 @@
 // lib/tela_ata_registro_precos.dart
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/api_service.dart';
 
 class TelaAtaRegistroPrecos extends StatefulWidget {
   const TelaAtaRegistroPrecos({super.key});
@@ -9,73 +13,123 @@ class TelaAtaRegistroPrecos extends StatefulWidget {
 }
 
 class _TelaAtaRegistroPrecosState extends State<TelaAtaRegistroPrecos> {
-  // Cores (mantendo a cor roxa principal que você usa)
+  // Cores e Services
   static const Color azulPrincipal = Color.fromRGBO(56, 28, 185, 1);
-  static const Color cinzaClaroCard = Color(0xFFF0F0F0); // Cor de fundo dos campos
+  static const Color cinzaClaroCard = Color(0xFFF0F0F0);
+  final ApiService _apiService = ApiService();
 
-  // Valores selecionados para os Dropdowns
-  String? _paginaSelecionada;
-  String? _tamanhoPaginaSelecionado;
-  String? _uasgSelecionada;
-  String? _mcSelecionado; // Novo campo
-  String? _arpSelecionado; // Novo campo
-  String? _numeroAvisoSelecionado;
-  String? _modalidadeSelecionada;
+  // Controladores
+  final TextEditingController _dataVigenciaInicialController = TextEditingController();
+  final TextEditingController _dataVigenciaFinalController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  
+  // Variáveis de Estado
+  int _paginaAtual = 1;
+  bool _isCarregandoMais = false;
+  List<AtaRegistroPreco> _resultadosFiltrados = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  ArpResponse? _arpResponse;
 
-  // Controladores para os campos de data
-  final TextEditingController _dataPublicacaoInicialController = TextEditingController();
-  final TextEditingController _dataPublicacaoFinalController = TextEditingController();
-  final TextEditingController _dataVigenciaInicialController = TextEditingController(); // Nova data
-  final TextEditingController _dataVigenciaFinalController = TextEditingController(); // Nova data
-
-  // Opções para os Dropdowns
-  final List<String> _opcoesPagina = ['1', '2', '3', '4', '5'];
-  final List<String> _opcoesTamanhoPagina = ['10', '20', '50', '100'];
-  final List<String> _opcoesUASG = ['UASG', 'UASG 1', 'UASG 2', 'UASG 3']; // Ajustado o hint
-  final List<String> _opcoesMC = ['MC', 'MC 1', 'MC 2', 'MC 3']; // Exemplo de opções para MC
-  final List<String> _opcoesARP = ['ARP', 'ARP 1', 'ARP 2', 'ARP 3']; // Exemplo de opções para ARP
-  final List<String> _opcoesNumeroAviso = ['Nº aviso', 'Aviso 1', 'Aviso 2'];
-  final List<String> _opcoesModalidade = ['Modalidade', 'Pregão', 'Concorrência', 'Tomada de Preços'];
-
-  // Função para exibir o DatePicker (a mesma da tela de Licitações)
-  Future<void> _selectDate(BuildContext context, TextEditingController controller) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: azulPrincipal, // Cor principal do DatePicker
-              onPrimary: Colors.white, // Cor do texto nos botões do DatePicker
-              onSurface: Colors.black87, // Cor do texto no calendário
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: azulPrincipal, // Cor dos botões de texto (CANCELAR, OK)
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        controller.text = "${picked.day}/${picked.month}/${picked.year}";
-      });
-    }
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _searchController.addListener(_filtrarResultados);
   }
 
   @override
   void dispose() {
-    _dataPublicacaoInicialController.dispose();
-    _dataPublicacaoFinalController.dispose();
+    _scrollController.dispose();
+    _searchController.dispose();
     _dataVigenciaInicialController.dispose();
     _dataVigenciaFinalController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels == _scrollController.position.maxScrollExtent &&
+        !_isCarregandoMais &&
+        _paginaAtual < (_arpResponse?.totalPaginas ?? 0)) {
+      _carregarMaisDados();
+    }
+  }
+
+  void _filtrarResultados() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _resultadosFiltrados = _arpResponse?.resultado.where((ata) {
+            final objetoLower = ata.objeto.toLowerCase();
+            final unidadeGestoraLower = ata.nomeUnidadeGerenciadora.toLowerCase();
+            return objetoLower.contains(query) || unidadeGestoraLower.contains(query);
+          }).toList() ?? [];
+    });
+  }
+
+  Future<void> _buscarDados() async {
+    if (_dataVigenciaInicialController.text.isEmpty ||
+        _dataVigenciaFinalController.text.isEmpty) {
+      setState(() {
+        _errorMessage = "Por favor, preencha as datas de vigência inicial e final.";
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _arpResponse = null;
+      _resultadosFiltrados = [];
+      _paginaAtual = 1;
+      _searchController.clear();
+    });
+
+    try {
+      final response = await _apiService.buscarArp(
+        pagina: _paginaAtual,
+        dataVigenciaInicial: _formatarDataParaApi(_dataVigenciaInicialController.text),
+        dataVigenciaFinal: _formatarDataParaApi(_dataVigenciaFinalController.text),
+      );
+      setState(() {
+        _arpResponse = response;
+        _resultadosFiltrados = response.resultado;
+      });
+    } catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+  
+  Future<void> _carregarMaisDados() async {
+    setState(() => _isCarregandoMais = true);
+    _paginaAtual++;
+
+    try {
+      final response = await _apiService.buscarArp(
+        pagina: _paginaAtual,
+        dataVigenciaInicial: _formatarDataParaApi(_dataVigenciaInicialController.text),
+        dataVigenciaFinal: _formatarDataParaApi(_dataVigenciaFinalController.text),
+      );
+      setState(() {
+        _arpResponse?.resultado.addAll(response.resultado);
+        _filtrarResultados();
+      });
+    } catch (e) {
+      _paginaAtual--;
+    } finally {
+      setState(() => _isCarregandoMais = false);
+    }
+  }
+
+  String? _formatarDataParaApi(String? data) {
+    if (data == null || data.isEmpty) return null;
+    try {
+      return DateFormat('yyyy-MM-dd').format(DateFormat('dd/MM/yyyy').parse(data));
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
@@ -87,370 +141,216 @@ class _TelaAtaRegistroPrecosState extends State<TelaAtaRegistroPrecos> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Buscar', // Conforme a imagem
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: azulPrincipal), // Ícone de lupa
-            onPressed: () {
-              // Ação do ícone de busca
-              print('Ícone de busca clicado!');
-            },
-          ),
-        ],
+        title: const Text('Buscar', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
       ),
-      body: Column( // Esta é a Column principal do body
-        children: [
-          // Espaço roxo acima do container branco (se houver, com flex 0 ele é mínimo)
-          Expanded(
-            flex: 0, // Ajuste para o tamanho da AppBar + um pouco mais
-            child: Container(color: azulPrincipal),
-          ),
-          // Container branco com o formulário
-          Expanded(
-            flex: 7, // Ajuste para a altura do container branco
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30.0),
-                  topRight: Radius.circular(30.0),
+      body: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('ATA DE REGISTRO DE PREÇOS', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: azulPrincipal), textAlign: TextAlign.center),
+            const SizedBox(height: 5),
+            const Text('Preencha os campos abaixo', style: TextStyle(fontSize: 16, color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 30),
+            Row(
+              children: [
+                Expanded(child: _buildDateField(label: 'Data vigência inicial *', controller: _dataVigenciaInicialController)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildDateField(label: 'Data vigência final *', controller: _dataVigenciaFinalController)),
+              ],
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _buscarDados,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: azulPrincipal,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+              child: _isLoading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                  : const Text('BUSCAR', style: TextStyle(fontSize: 18, color: Colors.white)),
+            ),
+            const SizedBox(height: 30),
+            if (_arpResponse != null && _arpResponse!.resultado.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    labelText: 'Pesquisar nos resultados...',
+                    hintText: 'Digite o objeto, nome da unidade...',
+                    prefixIcon: const Icon(Icons.search, color: azulPrincipal),
+                    filled: true,
+                    fillColor: cinzaClaroCard,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide.none),
+                  ),
                 ),
               ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
+            _buildResultados(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultados() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator(color: azulPrincipal));
+    if (_errorMessage != null) return Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 16), textAlign: TextAlign.center));
+    if (_arpResponse == null) return const Center(child: Text("Preencha os filtros e clique em buscar.", style: TextStyle(fontSize: 16, color: Colors.grey)));
+    if (_resultadosFiltrados.isEmpty && _searchController.text.isNotEmpty) return const Center(child: Text("Nenhum resultado encontrado para sua busca.", style: TextStyle(fontSize: 16, color: Colors.grey)));
+    if (_arpResponse!.resultado.isEmpty) return const Center(child: Text("Nenhum resultado encontrado para os filtros informados.", style: TextStyle(fontSize: 16, color: Colors.grey)));
+    
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _resultadosFiltrados.length + (_isCarregandoMais ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _resultadosFiltrados.length) {
+          return const Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Center(child: CircularProgressIndicator(color: azulPrincipal)));
+        }
+        
+        final ata = _resultadosFiltrados[index];
+        
+        return InkWell(
+          onTap: () => _mostrarDetalhesModal(ata),
+          borderRadius: BorderRadius.circular(10),
+          child: Card(
+            elevation: 2,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Ata: ${ata.numeroAtaRegistroPreco}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: azulPrincipal)),
+                  const SizedBox(height: 8),
+                  Text(ata.nomeUnidadeGerenciadora, style: const TextStyle(fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const Divider(height: 20),
+                  Text("Objeto: ${ata.objeto}", style: const TextStyle(color: Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _mostrarDetalhesModal(AtaRegistroPreco ata) {
+    final DateFormat formatter = DateFormat('dd/MM/yyyy');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch, // Estica os campos
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'ATA DE REGISTRO DE PREÇOS', // Título da tela
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: azulPrincipal,
+                    Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(12)))),
+                    const SizedBox(height: 20),
+                    Text('Detalhes da Ata: ${ata.numeroAtaRegistroPreco}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: azulPrincipal)),
+                    const Divider(height: 30),
+                    _buildDetailRow('Objeto', ata.objeto),
+                    _buildDetailRow('Órgão', ata.nomeOrgao),
+                    _buildDetailRow('Unidade Gerenciadora', ata.nomeUnidadeGerenciadora),
+                    _buildDetailRow('Modalidade', ata.nomeModalidadeCompra),
+                    _buildDetailRow('Valor Total', 'R\$ ${ata.valorTotal.toStringAsFixed(2)}'),
+                    _buildDetailRow('Status', ata.statusAta),
+                    _buildDetailRow('Data de Assinatura', formatter.format(ata.dataAssinatura)),
+                    _buildDetailRow('Vigência', '${formatter.format(ata.dataVigenciaInicial)} a ${formatter.format(ata.dataVigenciaFinal)}'),
+                    _buildDetailRow('Itens', ata.quantidadeItens.toString()),
+                    if (ata.linkAtaPNCP != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: Center(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text('Ver no PNCP'),
+                            onPressed: () async {
+                              final uri = Uri.parse(ata.linkAtaPNCP!);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(backgroundColor: azulPrincipal),
+                          ),
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 5),
-                    const Text(
-                      'Preencha os campos abaixo',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Campos de Página e Tamanho da Página
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'Página',
-                            value: _paginaSelecionada,
-                            items: _opcoesPagina,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _paginaSelecionada = newValue;
-                              });
-                            },
-                            hintText: '1', // Hint conforme a imagem
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'Tamanho da página',
-                            value: _tamanhoPaginaSelecionado,
-                            items: _opcoesTamanhoPagina,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _tamanhoPaginaSelecionado = newValue;
-                              });
-                            },
-                            hintText: '10', // Hint conforme a imagem
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Campos UASG, MC e ARP (três em uma linha)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'UASG',
-                            value: _uasgSelecionada,
-                            items: _opcoesUASG,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _uasgSelecionada = newValue;
-                              });
-                            },
-                            hintText: 'UASG', // Hint conforme a imagem
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'MC', // Novo campo
-                            value: _mcSelecionado,
-                            items: _opcoesMC,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _mcSelecionado = newValue;
-                              });
-                            },
-                            hintText: 'MC', // Hint conforme a imagem
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'ARP', // Novo campo
-                            value: _arpSelecionado,
-                            items: _opcoesARP,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _arpSelecionado = newValue;
-                              });
-                            },
-                            hintText: 'ARP', // Hint conforme a imagem
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Campos Número aviso e Modalidade (dois em uma linha)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'Número aviso',
-                            value: _numeroAvisoSelecionado,
-                            items: _opcoesNumeroAviso,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _numeroAvisoSelecionado = newValue;
-                              });
-                            },
-                            hintText: 'Nº aviso', // Hint conforme a imagem
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDropdownField(
-                            label: 'Modalidade',
-                            value: _modalidadeSelecionada,
-                            items: _opcoesModalidade,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _modalidadeSelecionada = newValue;
-                              });
-                            },
-                            hintText: 'Modalidade', // Hint conforme a imagem
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Campos de Data de Publicação
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDateField(
-                            label: 'Data publicação inicial',
-                            controller: _dataPublicacaoInicialController,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDateField(
-                            label: 'Data publicação final',
-                            controller: _dataPublicacaoFinalController,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20), // Espaço adicional para as novas datas
-
-                    // Campos de Data de Vigência (novos)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDateField(
-                            label: 'Data vigência inicial',
-                            controller: _dataVigenciaInicialController,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDateField(
-                            label: 'Data vigência final',
-                            controller: _dataVigenciaFinalController,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30), // Espaço antes do texto de confirmação
-
-                    // Texto de confirmação
-                    const Center(
-                      child: Text(
-                        'Confirme se os dados antes de prosseguir',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Botão BUSCAR (fora do SingleChildScrollView, diretamente no Column pai)
-                    ElevatedButton(
-                          onPressed: () {
-                            // Ação do botão BUSCAR
-                            print('Botão BUSCAR clicado na tela de Ata de Registro de Preços!');
-                            print('Página: $_paginaSelecionada');
-                            print('Tamanho da Página: $_tamanhoPaginaSelecionado');
-                            print('UASG: $_uasgSelecionada');
-                            print('MC: $_mcSelecionado');
-                            print('ARP: $_arpSelecionado');
-                            print('Número Aviso: $_numeroAvisoSelecionado');
-                            print('Modalidade: $_modalidadeSelecionada');
-                            print('Data Publicação Inicial: ${_dataPublicacaoInicialController.text}');
-                            print('Data Publicação Final: ${_dataPublicacaoFinalController.text}');
-                            print('Data Vigência Inicial: ${_dataVigenciaInicialController.text}');
-                            print('Data Vigência Final: ${_dataVigenciaFinalController.text}');
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: azulPrincipal,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                          ),
-                          child: const Text(
-                            'BUSCAR',
-                            style: TextStyle(fontSize: 18, color: Colors.white),
-                          ),
-                        ),
-                    const SizedBox(height: 20), // Espaço no final
                   ],
                 ),
-              ),  
-            ),
-          ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 16)),
         ],
       ),
     );
   }
 
-  // Widget auxiliar para construir um campo Dropdown (mesma da TelaFornecedores)
-  Widget _buildDropdownField({
-    required String label,
-    required String? value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    String? hintText, // Usado para hints mais específicos
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: cinzaClaroCard,
-            borderRadius: BorderRadius.circular(10.0),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: value,
-              icon: const Icon(Icons.keyboard_arrow_down, color: azulPrincipal),
-              onChanged: onChanged,
-              items: items.map<DropdownMenuItem<String>>((String item) {
-                return DropdownMenuItem<String>(
-                  // O valor do DropdownMenuItem é null se o item for o hintText
-                  value: item == hintText ? null : item,
-                  child: Text(
-                    item,
-                    style: TextStyle(
-                      color: item == hintText ? Colors.grey : Colors.black87,
-                    ),
-                  ),
-                );
-              }).toList(),
-              hint: Text(
-                hintText ?? label, // Se hintText não for fornecido, usa o label
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-          ),
-        ),
-      ],
+  Future<void> _selectDate(BuildContext context, TextEditingController controller) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: azulPrincipal)),
+          child: child!,
+        );
+      },
     );
+    if (picked != null) {
+      setState(() => controller.text = DateFormat('dd/MM/yyyy').format(picked));
+    }
   }
 
-  // Widget auxiliar para construir um campo de Data (mesma da TelaLicitacoes)
-  Widget _buildDateField({
-    required String label,
-    required TextEditingController controller,
-  }) {
+  Widget _buildDateField({ required String label, required TextEditingController controller }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: () => _selectDate(context, controller),
           child: AbsorbPointer(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: cinzaClaroCard,
-                borderRadius: BorderRadius.circular(10.0),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: TextField(
-                controller: controller,
-                readOnly: true,
-                decoration: InputDecoration(
-                  hintText: 'Data',
-                  hintStyle: const TextStyle(color: Colors.grey),
-                  border: InputBorder.none,
-                  suffixIcon: Icon(Icons.calendar_today, color: azulPrincipal),
-                ),
-                style: const TextStyle(color: Colors.black87),
+            child: TextField(
+              controller: controller,
+              readOnly: true,
+              decoration: InputDecoration(
+                hintText: 'Data',
+                filled: true,
+                fillColor: cinzaClaroCard,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide.none),
+                suffixIcon: const Icon(Icons.calendar_today, color: azulPrincipal),
               ),
             ),
           ),

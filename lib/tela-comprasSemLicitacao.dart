@@ -1,26 +1,23 @@
-// lib/tela-fornecedores.dart
 
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
-class TelaFornecedores extends StatefulWidget {
-  const TelaFornecedores({super.key});
+class TelaComprasSemLicitacao extends StatefulWidget {
+  const TelaComprasSemLicitacao({super.key});
 
   @override
-  State<TelaFornecedores> createState() => _TelaFornecedoresState();
+  State<TelaComprasSemLicitacao> createState() => _TelaComprasSemLicitacaoState();
 }
 
-class _TelaFornecedoresState extends State<TelaFornecedores> {
+class _TelaComprasSemLicitacaoState extends State<TelaComprasSemLicitacao> {
   // Cores e Services
   static const Color azulPrincipal = Color.fromRGBO(56, 28, 185, 1);
   static const Color cinzaClaroCard = Color(0xFFF0F0F0);
   final ApiService _apiService = ApiService();
 
   // Controladores do Formulário
-  final TextEditingController _cnpjController = TextEditingController();
-  final TextEditingController _cpfController = TextEditingController();
-  final TextEditingController _cnaeController = TextEditingController();
-  String? _ativoSelecionado = 'Sim'; // Valor padrão para o campo obrigatório
+  final TextEditingController _anoController = TextEditingController();
+  final TextEditingController _uasgController = TextEditingController();
 
   // Variáveis de Estado
   final ScrollController _scrollController = ScrollController();
@@ -28,10 +25,10 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
   
   int _paginaAtual = 1;
   bool _isCarregandoMais = false;
-  List<Fornecedor> _resultadosFiltrados = [];
+  List<CompraSemLicitacao> _resultadosFiltrados = [];
   bool _isLoading = false;
   String? _errorMessage;
-  FornecedorResponse? _fornecedorResponse;
+  CompraSemLicitacaoResponse? _compraResponse;
 
   @override
   void initState() {
@@ -44,16 +41,15 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
   void dispose() {
     _scrollController.dispose();
     _searchController.dispose();
-    _cnpjController.dispose();
-    _cpfController.dispose();
-    _cnaeController.dispose();
+    _anoController.dispose();
+    _uasgController.dispose();
     super.dispose();
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels == _scrollController.position.maxScrollExtent &&
         !_isCarregandoMais &&
-        _paginaAtual < (_fornecedorResponse?.totalPaginas ?? 0)) {
+        _paginaAtual < (_compraResponse?.totalPaginas ?? 0)) {
       _carregarMaisDados();
     }
   }
@@ -61,34 +57,38 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
   void _filtrarResultados() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      _resultadosFiltrados = _fornecedorResponse?.resultado.where((fornecedor) {
-            final nomeLower = fornecedor.nomeRazaoSocialFornecedor.toLowerCase();
-            final cnpjLower = fornecedor.cnpj?.toLowerCase() ?? '';
-            return nomeLower.contains(query) || cnpjLower.contains(query);
+      _resultadosFiltrados = _compraResponse?.resultado.where((compra) {
+            final objetoLower = compra.dsObjetoLicitacao.toLowerCase();
+            final uasgLower = compra.noAusg.toLowerCase();
+            return objetoLower.contains(query) || uasgLower.contains(query);
           }).toList() ?? [];
     });
   }
 
   Future<void> _buscarDados() async {
+    final ano = int.tryParse(_anoController.text);
+    if (ano == null) {
+      setState(() => _errorMessage = "O campo 'Ano do Aviso' é obrigatório e deve ser um número.");
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _fornecedorResponse = null;
+      _compraResponse = null;
       _resultadosFiltrados = [];
       _paginaAtual = 1;
       _searchController.clear();
     });
 
     try {
-      final response = await _apiService.buscarFornecedores(
+      final response = await _apiService.buscarComprasSemLicitacao(
         pagina: _paginaAtual,
-        ativo: _ativoSelecionado == 'Sim', // Converte 'Sim'/'Não' para true/false
-        cnpj: _cnpjController.text,
-        cpf: _cpfController.text,
-        codigoCnae: _cnaeController.text,
+        dtAnoAviso: ano,
+        coUasg: _uasgController.text,
       );
       setState(() {
-        _fornecedorResponse = response;
+        _compraResponse = response;
         _resultadosFiltrados = response.resultado;
       });
     } catch (e) {
@@ -103,15 +103,13 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
     _paginaAtual++;
 
     try {
-      final response = await _apiService.buscarFornecedores(
+      final response = await _apiService.buscarComprasSemLicitacao(
         pagina: _paginaAtual,
-        ativo: _ativoSelecionado == 'Sim',
-        cnpj: _cnpjController.text,
-        cpf: _cpfController.text,
-        codigoCnae: _cnaeController.text,
+        dtAnoAviso: int.parse(_anoController.text),
+        coUasg: _uasgController.text,
       );
       setState(() {
-        _fornecedorResponse?.resultado.addAll(response.resultado);
+        _compraResponse?.resultado.addAll(response.resultado);
         _filtrarResultados();
       });
     } catch (e) {
@@ -132,7 +130,7 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Buscar Fornecedores', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        title: const Text('Compras Sem Licitação', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -140,28 +138,27 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('FORNECEDORES', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: azulPrincipal), textAlign: TextAlign.center),
+            const Text('COMPRAS SEM LICITAÇÃO', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: azulPrincipal), textAlign: TextAlign.center),
             const SizedBox(height: 30),
-            // CAMPOS DO FORMULÁRIO
-            _buildTextField(label: 'CNPJ', controller: _cnpjController, hint: 'Digite o CNPJ', keyboardType: TextInputType.number),
+            
+            _buildTextField(label: 'Ano do Aviso *', controller: _anoController, hint: 'Ex: 2024', keyboardType: TextInputType.number),
             const SizedBox(height: 20),
-            _buildTextField(label: 'CPF', controller: _cpfController, hint: 'Digite o CPF', keyboardType: TextInputType.number),
-            const SizedBox(height: 20),
-            _buildTextField(label: 'Cód. CNAE', controller: _cnaeController, hint: 'Código CNAE', keyboardType: TextInputType.number),
-            const SizedBox(height: 20),
-            _buildDropdownField(label: 'Ativo? *', value: _ativoSelecionado, items: ['Sim', 'Não']),
+            _buildTextField(label: 'Cód. UASG (opcional)', controller: _uasgController, hint: 'Código da UASG', keyboardType: TextInputType.number),
             const SizedBox(height: 30),
+
             ElevatedButton(
               onPressed: _isLoading ? null : _buscarDados,
               style: ElevatedButton.styleFrom(backgroundColor: azulPrincipal, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0))),
               child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)) : const Text('BUSCAR', style: TextStyle(fontSize: 18, color: Colors.white)),
             ),
             const SizedBox(height: 30),
-            if (_fornecedorResponse != null && _fornecedorResponse!.resultado.isNotEmpty)
+
+            if (_compraResponse != null && _compraResponse!.resultado.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: TextField(controller: _searchController, decoration: InputDecoration(labelText: 'Pesquisar nos resultados...', prefixIcon: const Icon(Icons.search, color: azulPrincipal), filled: true, fillColor: cinzaClaroCard, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide.none))),
               ),
+
             _buildResultados(),
           ],
         ),
@@ -172,9 +169,9 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
   Widget _buildResultados() {
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: azulPrincipal));
     if (_errorMessage != null) return Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 16), textAlign: TextAlign.center));
-    if (_fornecedorResponse == null) return const Center(child: Text("Preencha os filtros e clique em buscar.", style: TextStyle(fontSize: 16, color: Colors.grey)));
+    if (_compraResponse == null) return const Center(child: Text("Preencha os filtros e clique em buscar.", style: TextStyle(fontSize: 16, color: Colors.grey)));
     if (_resultadosFiltrados.isEmpty && _searchController.text.isNotEmpty) return const Center(child: Text("Nenhum resultado encontrado para sua busca.", style: TextStyle(fontSize: 16, color: Colors.grey)));
-    if (_fornecedorResponse!.resultado.isEmpty) return const Center(child: Text("Nenhum resultado encontrado para os filtros informados.", style: TextStyle(fontSize: 16, color: Colors.grey)));
+    if (_compraResponse!.resultado.isEmpty) return const Center(child: Text("Nenhum resultado encontrado para os filtros informados.", style: TextStyle(fontSize: 16, color: Colors.grey)));
     
     return ListView.builder(
       shrinkWrap: true,
@@ -183,10 +180,10 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
       itemBuilder: (context, index) {
         if (index == _resultadosFiltrados.length) return const Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Center(child: CircularProgressIndicator(color: azulPrincipal)));
         
-        final fornecedor = _resultadosFiltrados[index];
+        final compra = _resultadosFiltrados[index];
         
         return InkWell(
-          onTap: () => _mostrarDetalhesModal(fornecedor),
+          onTap: () => _mostrarDetalhesModal(compra),
           borderRadius: BorderRadius.circular(10),
           child: Card(
             elevation: 2,
@@ -197,12 +194,11 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(fornecedor.nomeRazaoSocialFornecedor, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: azulPrincipal)),
+                  Text(compra.noAusg, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: azulPrincipal)),
                   const SizedBox(height: 8),
-                  if (fornecedor.cnpj != null) Text("CNPJ: ${fornecedor.cnpj}", style: const TextStyle(color: Colors.black54)),
-                  if (fornecedor.cpf != null) Text("CPF: ${fornecedor.cpf}", style: const TextStyle(color: Colors.black54)),
-                  const SizedBox(height: 4),
-                  Text("${fornecedor.nomeMunicipio} - ${fornecedor.ufSigla}", style: const TextStyle(color: Colors.grey)),
+                  Text("Objeto: ${compra.dsObjetoLicitacao}", style: const TextStyle(color: Colors.black87), maxLines: 3, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+                  Text("Ano do Aviso: ${compra.dtAnoAviso}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             ),
@@ -212,12 +208,12 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
     );
   }
 
-  void _mostrarDetalhesModal(Fornecedor fornecedor) {
+  void _mostrarDetalhesModal(CompraSemLicitacao compra) {
     showModalBottomSheet(
       context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return DraggableScrollableSheet(
-          expand: false, initialChildSize: 0.6, maxChildSize: 0.9, minChildSize: 0.4,
+          expand: false, initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4,
           builder: (context, scrollController) {
             return SingleChildScrollView(
               controller: scrollController,
@@ -228,16 +224,14 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
                   children: [
                     Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(12)))),
                     const SizedBox(height: 20),
-                    Text('Detalhes do Fornecedor', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: azulPrincipal)),
+                    const Text('Detalhes da Compra', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: azulPrincipal)),
                     const Divider(height: 30),
-                    _buildDetailRow('Razão Social', fornecedor.nomeRazaoSocialFornecedor),
-                    if(fornecedor.cnpj != null) _buildDetailRow('CNPJ', fornecedor.cnpj!),
-                    if(fornecedor.cpf != null) _buildDetailRow('CPF', fornecedor.cpf!),
-                    _buildDetailRow('Status', fornecedor.ativo ? 'Ativo' : 'Inativo'),
-                    _buildDetailRow('Habilitado para Licitar', fornecedor.habilitadoLicitar ? 'Sim' : 'Não'),
-                    _buildDetailRow('Porte', fornecedor.porteEmpresaNome),
-                    _buildDetailRow('Localidade', '${fornecedor.nomeMunicipio} - ${fornecedor.ufSigla}'),
-                    _buildDetailRow('CNAE', fornecedor.nomeCnae),
+                    _buildDetailRow('Objeto', compra.dsObjetoLicitacao),
+                    _buildDetailRow('UASG', compra.noAusg),
+                    _buildDetailRow('Responsável', compra.noResponsavelDeclDisp),
+                    if(compra.vrEstimado != null) _buildDetailRow('Valor Estimado', 'R\$ ${compra.vrEstimado!.toStringAsFixed(2)}'),
+                    if(compra.dsFundamentoLegal != null) _buildDetailRow('Fundamento Legal', compra.dsFundamentoLegal!),
+                    if(compra.dsJustificativa != null) _buildDetailRow('Justificativa', compra.dsJustificativa!),
                   ],
                 ),
               ),
@@ -269,22 +263,6 @@ class _TelaFornecedoresState extends State<TelaFornecedores> {
         Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
         const SizedBox(height: 8),
         TextField(controller: controller, keyboardType: keyboardType, decoration: InputDecoration(hintText: hint, filled: true, fillColor: cinzaClaroCard, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide.none))),
-      ],
-    );
-  }
-
-  Widget _buildDropdownField({required String label, String? value, required List<String> items}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: value,
-          decoration: InputDecoration(filled: true, fillColor: cinzaClaroCard, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide.none)),
-          items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item))).toList(),
-          onChanged: (newValue) => setState(() => _ativoSelecionado = newValue),
-        ),
       ],
     );
   }
